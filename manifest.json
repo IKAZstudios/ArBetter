@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "ArBetter",
+  "version": "1.0.0",
+  "description": "Sick of Arbors terrible design and inability to tick off assignments? Here's the fix...",
+  "permissions": ["scripting", "storage"],
+  "host_permissions": ["*://*.arbor.education/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.arbor.education/*"],
+      "js": ["content.js"],
+      "css": ["style.css"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js", "arbetter_logo.png"],
+      "matches": ["*://*.arbor.education/*"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ArBetter",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "icons": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}

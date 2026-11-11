@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArBetter</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1d2330;
+      --muted: #6b7280;
+      --border: #e3e7ee;
+      --primary: #4f46e5;
+      --track-off: #cbd2dc;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #181b22;
+        --text: #e6e8ec;
+        --muted: #9aa3b2;
+        --border: #2a2f3a;
+        --primary: #818cf8;
+        --track-off: #3a404d;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      width: 280px;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      font-size: 14px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    header img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .label {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .label strong {
+      font-weight: 600;
+    }
+
+    .label span {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 2px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--track-off);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s ease;
+    }
+
+    .switch input:checked + .slider {
+      background: var(--primary);
+    }
+
+    .switch input:checked + .slider::before {
+      transform: translateX(20px);
+    }
+
+    .switch input:focus-visible + .slider {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    #status {
+      margin: 12px 0 0;
+      min-height: 1.2em;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="arbetter_logo.png" alt="">
+    <h1>ArBetter</h1>
+  </header>
+
+  <div class="row">
+    <div class="label">
+      <strong>Enable ArBetter</strong>
+      <span id="state-text">Checking…</span>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="enabled" aria-label="Enable ArBetter">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
