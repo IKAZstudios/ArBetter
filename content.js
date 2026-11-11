@@ -377,7 +377,7 @@
             <li>Notifications are not displayed only indicated</li>
         </ul>
         <p id="ab-footer-text" class="ab-footer-text">These changes are either coming soon or not possible due to Arbor's design.</p>
-        <a href="#" target="_blank" rel="noopener noreferrer">Abour ArBetter</a>  
+        <a href="https://github.com/IKAZstudios/ArBetter" target="_blank" rel="noopener noreferrer">Abour ArBetter</a>  
       </footer>`;
     document.body.appendChild(root);
 
