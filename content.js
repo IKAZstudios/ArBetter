@@ -4,6 +4,7 @@
 
   const ROOT_ID = 'arbor-minimal-container';
   const FAB_ID = 'arbetter-return-fab';
+  const BANNER_ID = 'arbetter-home-banner';
   const CLS_MINIMAL = 'arbetter-minimal';
   const CLS_PAGE_DARK = 'arbetter-dark';
   const KEY_CACHE_ENABLED = 'arbetter-enabled-cache';
@@ -15,6 +16,9 @@
   const IN = 'ARBETTER_INJECT';
 
   const LOGO_URL = chrome.runtime.getURL('arbetter_logo.png');
+  const ICON32_URL = chrome.runtime.getURL('icon32.png');
+  const CUSTOM_TITLE = 'ArBetter';
+  const DASHBOARD_PATH = '/?/students/home-ui/dashboard';
   const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -37,6 +41,15 @@
     injectReady: false,
     configSent: false,
     nativeView: false,
+    loading: true,
+    loaded: {
+      calendar: false,
+      kpi: false,
+      assignmentsKpi: false,
+      assignments: false,
+      assignmentsOverdue: false,
+      assignmentsSubmitted: false
+    },
     tab: 'active',
     completed: {},
     calendar: [],
@@ -45,9 +58,27 @@
     assignments: [],
     assignmentsDue: [],
     assignmentsOverdue: [],
+    assignmentsSubmitted: [],
     profile: null,
     notifications: [],
     unread: 0
+  };
+
+  let loaderTimer = null;
+  const hideLoader = () => {
+    if (!state.loading) return;
+    state.loading = false;
+    clearTimeout(loaderTimer);
+    const loader = $('ab-loader');
+    if (!loader) return;
+    loader.classList.add('is-hidden');
+    setTimeout(() => { loader.hidden = true; }, 260);
+  };
+
+  const markLoaded = (key) => {
+    if (!(key in state.loaded)) return;
+    state.loaded[key] = true;
+    if (Object.values(state.loaded).every(Boolean)) hideLoader();
   };
 
   if (getLS(KEY_DARK) === 'true') html.classList.add(CLS_PAGE_DARK);
@@ -66,29 +97,56 @@
     if (!state.active) return;
 
     switch (type) {
-      case 'calendar':
-        state.calendar = parseCalendar(payload);
+      case 'calendar': {
+        const parsed = [];
+
+        if (payload && payload.items && payload.items.length) {
+          const first = payload.items[0];
+          const isStatic =
+          first &&
+          first.fields &&
+          first.fields.response &&
+          first.fields.response.value &&
+          Array.isArray(first.fields.response.value.pages);
+
+          if (isStatic) parsed.push(...parseStaticCalendar(payload));
+          else parsed.push(...parseCalendar(payload));
+        }
+
+        state.calendar = state.calendar.concat(parsed);
+        mergeCalendar();
         renderCalendar();
+        markLoaded('calendar');
         break;
+      }
       case 'kpi':
         state.kpiMain = parseKpis(payload);
         renderKpis();
+        markLoaded('kpi');
         break;
       case 'assignmentsKpi':
         state.kpiAssign = parseKpis(payload);
         renderKpis();
+        markLoaded('assignmentsKpi');
         break;
       case 'assignments':
         state.assignmentsDue = parseAssignments(payload);
         mergeAssignments();
         renderAssignments();
+        markLoaded('assignments');
         break;
       case 'assignmentsOverdue':
         state.assignmentsOverdue = parseAssignments(payload);
         mergeAssignments();
         renderAssignments();
+        markLoaded('assignmentsOverdue');
         break;
-
+      case 'assignmentsSubmitted':
+        state.assignmentsSubmitted = parseAssignments(payload);
+        mergeAssignments();
+        renderAssignments();
+        markLoaded('assignmentsSubmitted');
+        break;
       case 'profile':
         mergeProfile(payload);
         renderProfile();
@@ -97,7 +155,10 @@
         handleNotifications(payload);
         break;
       case 'error':
-        if (payload && payload.action === 'notifications') toast('Could not load notifications.');
+        if (payload && payload.action) {
+          if (payload.action === 'notifications') toast('Could not load notifications.');
+          else markLoaded(payload.action);
+        }
         break;
       default:
         break;
@@ -106,9 +167,21 @@
 
   const mergeAssignments = () => {
     const byId = new Map();
-    state.assignmentsDue.concat(state.assignmentsOverdue).forEach((a) => byId.set(a.id, a));
+    state.assignmentsDue
+    .concat(state.assignmentsOverdue)
+    .forEach((a) => byId.set(a.id, Object.assign({}, a, { submitted: false })));
+    state.assignmentsSubmitted
+    .forEach((a) => byId.set(a.id, Object.assign({}, a, { submitted: true })));
     state.assignments = Array.from(byId.values());
   };
+  // const mergeCalendar = () => {
+  //   const byKey = new Map();
+  //   state.calendar.forEach((i) => {
+  //     const key = `${i.dayKey}|${i.time}|${i.title}`;
+  //     if (!byKey.has(key)) byKey.set(key, i);
+  //   });
+  //     state.calendar = Array.from(byKey.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  // };
 
 
   /* ---------- Inject main-world script ---------- */
@@ -126,32 +199,178 @@
   const sendConfig = () => {
     if (!state.injectReady || !state.storageChecked || !state.active || state.configSent) return;
     state.configSent = true;
+    loaderTimer = setTimeout(hideLoader, 6000);
     sendToPage({ type: 'config', enabled: true });
   };
 
-  /* ---------- Enable / disable ---------- */
-  const enable = () => {
-    state.active = true;
-    html.classList.add(CLS_MINIMAL);
-    ensureUI();
-    sendConfig();
+  /* ---------- Title & favicon management ---------- */
+  const brandState = {
+    applied: false,
+    origTitle: '',
+    origIcons: [],
+    activeIconUrl: ICON32_URL,
+    observer: null
   };
 
-  const disable = () => {
-    state.active = false;
-    html.classList.remove(CLS_MINIMAL);
-    const root = $(ROOT_ID);
-    const fab = $(FAB_ID);
-    if (root) root.remove();
-    if (fab) fab.remove();
+  const syncBranding = () => {
+    if (!brandState.applied) return;
+
+    if (document.title && document.title !== CUSTOM_TITLE) {
+      brandState.origTitle = document.title;
+    }
+    if (document.title !== CUSTOM_TITLE) {
+      document.title = CUSTOM_TITLE;
+    }
+
+    const head = document.head;
+    if (!head) return;
+
+    document.querySelectorAll('link[rel*="icon"]:not([data-arbetter-icon])').forEach((link) => {
+      if (!link.hasAttribute('data-arbetter-fallback-icon')) {
+        brandState.origIcons.push(link.cloneNode(true));
+      }
+      link.remove();
+    });
+
+    ['icon', 'shortcut icon'].forEach((rel) => {
+      let icon = head.querySelector(`link[data-arbetter-icon="${rel}"]`);
+      if (!icon) {
+        icon = document.createElement('link');
+        icon.rel = rel;
+        icon.setAttribute('data-arbetter-icon', rel);
+        icon.href = brandState.activeIconUrl;
+        head.appendChild(icon);
+      } else if (icon.href !== brandState.activeIconUrl) {
+        icon.href = brandState.activeIconUrl;
+      }
+    });
   };
 
-  chrome.storage.sync.get({ [KEY_ENABLED]: true }, (res) => {
-    state.storageChecked = true;
-    const enabled = res[KEY_ENABLED] !== false;
-    setLS(KEY_CACHE_ENABLED, String(enabled));
-    if (enabled) enable(); else disable();
-  });
+  const applyBranding = () => {
+    brandState.applied = true;
+    syncBranding();
+
+    if (!brandState.observer) {
+      brandState.observer = new MutationObserver(() => syncBranding());
+      brandState.observer.observe(html, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['href', 'rel']
+      });
+    }
+  };
+
+  const restoreBranding = () => {
+    brandState.applied = false;
+    if (brandState.observer) {
+      brandState.observer.disconnect();
+      brandState.observer = null;
+    }
+
+    const head = document.head;
+    if (head) {
+      document.querySelectorAll('link[data-arbetter-icon]').forEach((link) => link.remove());
+      if (brandState.origIcons.length) {
+        brandState.origIcons.forEach((link) => head.appendChild(link));
+        brandState.origIcons = [];
+      } else {
+        const fallback = document.createElement('link');
+        fallback.rel = 'icon';
+        fallback.href = '/favicon.ico';
+        fallback.setAttribute('data-arbetter-fallback-icon', 'true');
+        head.appendChild(fallback);
+      }
+    }
+
+    if (brandState.origTitle) {
+      document.title = brandState.origTitle;
+    }
+  };
+
+  /* ---------- Dashboard page check & warning banner ---------- */
+  const isDashboardPage = () =>
+  (window.location.pathname === '/' && window.location.search.startsWith('?/students/home-ui/dashboard')) ||
+  window.location.pathname.startsWith('/students/home-ui/dashboard');
+
+  const removeHomeWarning = () => {
+    const banner = $(BANNER_ID);
+    if (banner) banner.remove();
+  };
+
+    const showHomeWarning = () => {
+      if (window !== window.top || isDashboardPage() || $(BANNER_ID)) return;
+      if (/\/(login|logout|auth|sso|saml|oauth)\b/i.test(window.location.href)) return;
+
+      const mount = () => {
+        if (!state.active || $(BANNER_ID) || !document.body) return;
+        const banner = document.createElement('div');
+        banner.id = BANNER_ID;
+        banner.className = 'arbetter-home-banner';
+        banner.setAttribute('role', 'alert');
+        banner.innerHTML = `
+        <img class="arbetter-banner-logo" src="${LOGO_URL}" alt="">
+        <span class="arbetter-banner-text">ArBetter only works on the Arbor homepage.</span>
+        <a class="arbetter-banner-btn" href="${DASHBOARD_PATH}">Go to Homepage</a>
+        `;
+        document.body.appendChild(banner);
+      };
+
+      if (document.body) {
+        mount();
+        return;
+      }
+      const obs = new MutationObserver(() => {
+        if (document.body) {
+          obs.disconnect();
+          mount();
+        }
+      });
+      obs.observe(html, { childList: true });
+    };
+
+    if (state.active) {
+      if (isDashboardPage()) {
+        applyBranding();
+      } else {
+        html.classList.remove(CLS_MINIMAL);
+        showHomeWarning();
+      }
+    }
+
+    /* ---------- Enable / disable ---------- */
+    const enable = () => {
+      state.active = true;
+      if (!isDashboardPage()) {
+        html.classList.remove(CLS_MINIMAL);
+        restoreBranding();
+        showHomeWarning();
+        return;
+      }
+      removeHomeWarning();
+      html.classList.add(CLS_MINIMAL);
+      if (!state.nativeView) applyBranding();
+      ensureUI();
+      sendConfig();
+    };
+
+    const disable = () => {
+      state.active = false;
+      html.classList.remove(CLS_MINIMAL);
+      restoreBranding();
+      removeHomeWarning();
+      const root = $(ROOT_ID);
+      const fab = $(FAB_ID);
+      if (root) root.remove();
+      if (fab) fab.remove();
+    };
+
+    chrome.storage.sync.get({ [KEY_ENABLED]: true }, (res) => {
+      state.storageChecked = true;
+      const enabled = res[KEY_ENABLED] !== false;
+      setLS(KEY_CACHE_ENABLED, String(enabled));
+      if (enabled) enable(); else disable();
+    });
 
   /* ---------- Parsers ---------- */
   const todayKey = () => {
@@ -185,20 +404,172 @@
   };
 
   const parseCalendar = (payload) => (payload && payload.items ? payload.items : [])
-    .map((it) => {
-      const f = it.fields || {};
-      const start = text(f.start_datetime && f.start_datetime.value);
-      const end = text(f.end_datetime && f.end_datetime.value);
+  .map((it) => {
+    const f = it.fields || {};
+    const start = text(f.start_datetime && f.start_datetime.value);
+    const end = text(f.end_datetime && f.end_datetime.value);
+    return {
+      dayKey: start.slice(0, 10),
+       sortKey: start,
+       time: `${start.slice(11, 16)}–${end.slice(11, 16)}`,
+       title: text(f.title && f.title.value).trim() || 'Untitled',
+       room: text(f.location && f.location.value).trim()
+    };
+  })
+  .filter((i) => /^\d{4}-\d{2}-\d{2}$/.test(i.dayKey));
+
+  const tooltipCache = new Map();
+  const tooltipInFlight = new Set();
+  const tooltipQueue = [];
+  let activeTooltipWorkers = 0;
+
+  const parseTooltipHtml = (markup) => {
+    const doc = new DOMParser().parseFromString(text(markup), 'text/html');
+    const title = text(doc.querySelector('.mis-tooltip .title')?.textContent).trim();
+    const fields = {};
+
+    doc.querySelectorAll('.aligned-list li').forEach((li) => {
+      const label = text(li.querySelector('b')?.textContent).replace(/:$/, '').trim().toLowerCase();
+      const val = text(li.querySelector('span')?.textContent).replace(/\s+/g, ' ').trim();
+      if (label && val) fields[label] = val;
+    });
+
+      const location = fields.location || '';
+      const room = location.includes(': ') ? location.split(': ').pop().trim() : location;
+
       return {
-        dayKey: start.slice(0, 10),
-        sortKey: start,
-        time: `${start.slice(11, 16)}–${end.slice(11, 16)}`,
-        title: text(f.title && f.title.value).trim() || 'Untitled',
-        room: text(f.location && f.location.value).trim()
+        title,
+        date: fields.date || '',
+        location,
+        room,
+        staff: fields.staff || ''
       };
-    })
-    .filter((i) => /^\d{4}-\d{2}-\d{2}$/.test(i.dayKey))
-    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  };
+
+  const pumpTooltipQueue = () => {
+    while (activeTooltipWorkers < 5 && tooltipQueue.length) {
+      const eventId = tooltipQueue.shift();
+      if (!eventId || tooltipCache.has(eventId) || tooltipInFlight.has(eventId)) continue;
+
+      tooltipInFlight.add(eventId);
+      activeTooltipWorkers++;
+
+      fetch(`/students/calendar-entry/tooltip/id/${encodeURIComponent(eventId)}`, {
+        credentials: 'same-origin'
+      })
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error('HTTP ' + res.status))))
+      .then((html) => {
+        const details = parseTooltipHtml(html);
+        tooltipCache.set(eventId, details);
+
+        let needsRender = false;
+        const viewedDay = state.currentCalendarDay || todayKey();
+        state.calendar.forEach((ev) => {
+          if (ev.eventId === eventId) {
+            if (!ev.room && details.room) ev.room = details.room;
+            ev.details = details;
+            if (ev.dayKey === viewedDay) needsRender = true;
+          }
+        });
+        if (needsRender) renderCalendar();
+      })
+      .catch(() => {
+        tooltipCache.set(eventId, null);
+      })
+      .finally(() => {
+        tooltipInFlight.delete(eventId);
+        activeTooltipWorkers--;
+        pumpTooltipQueue();
+      });
+    }
+  };
+
+  const queueTooltipFetches = () => {
+    const viewedDay = state.currentCalendarDay || todayKey();
+    const pending = state.calendar
+    .filter((ev) => ev.eventId && !tooltipCache.has(ev.eventId) && !tooltipInFlight.has(ev.eventId))
+    .sort((a, b) => {
+      const aCurrent = a.dayKey === viewedDay ? 0 : 1;
+      const bCurrent = b.dayKey === viewedDay ? 0 : 1;
+      return aCurrent - bCurrent || a.sortKey.localeCompare(b.sortKey);
+    });
+
+    pending.forEach((ev) => {
+      if (!tooltipQueue.includes(ev.eventId)) tooltipQueue.push(ev.eventId);
+    });
+      pumpTooltipQueue();
+  };
+
+  const parseStaticCalendar = (payload) => {
+    const out = [];
+    const items = payload && Array.isArray(payload.items) ? payload.items : [];
+
+    items.forEach((it) => {
+      const pages = it && it.fields && it.fields.response && it.fields.response.value && it.fields.response.value.pages;
+      if (!Array.isArray(pages)) return;
+
+      pages.forEach((page) => {
+        const pageHtml = text(page && page.html);
+        if (!pageHtml) return;
+
+        const doc = new DOMParser().parseFromString(pageHtml, 'text/html');
+        const table = doc.querySelector('table.mis-cal');
+        if (!table) return;
+
+        const dayCells = Array.from(table.querySelectorAll('thead .mis-calendar-date[data-date]'));
+        const bodyRow = table.querySelector('tbody tr');
+        if (!bodyRow) return;
+
+        dayCells.forEach((cell) => {
+          const dayKey = cell.getAttribute('data-date');
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey || '')) return;
+
+          const colCell = bodyRow.cells[cell.cellIndex];
+          const events = colCell ? Array.from(colCell.querySelectorAll('.mis-cal-event')) : [];
+
+          events.forEach((ev) => {
+            const rawTime = text(ev.querySelector('.mis-cal-event-time span')?.textContent).trim();
+            const time = rawTime.replace(/\s*-\s*/g, '–');
+            const title = text(ev.querySelector('.title')?.textContent).trim() || 'Untitled';
+            const eventId = text(ev.getAttribute('data-eventid')).trim()
+            || (text(ev.getAttribute('ajax-link')).match(/\/id\/(\d+)/) || [])[1]
+            || '';
+            const cached = eventId ? tooltipCache.get(eventId) : null;
+
+            out.push({
+              eventId,
+              dayKey,
+              sortKey: `${dayKey} ${time || '00:00'}`,
+              time,
+              title,
+              room: (cached && cached.room) || '',
+                     details: cached || null
+            });
+          });
+        });
+      });
+    });
+
+    return out;
+  };
+
+  const mergeCalendar = () => {
+    const byKey = new Map();
+    state.calendar.forEach((i) => {
+      const normTime = text(i.time).replace(/\s*[–-]\s*/g, '–');
+      const key = `${i.dayKey}|${normTime}|${i.title}`;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, Object.assign({}, i, { time: normTime }));
+      } else {
+        if (!existing.room && i.room) existing.room = i.room;
+        if (!existing.eventId && i.eventId) existing.eventId = i.eventId;
+        if (!existing.details && i.details) existing.details = i.details;
+      }
+    });
+    state.calendar = Array.from(byKey.values()).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    queueTooltipFetches();
+  };
 
   const parseKpis = (payload) => (payload && payload.items ? payload.items : [])
     .map((it) => {
@@ -337,12 +708,26 @@
       </header>
       <div id="ab-profile-details" class="ab-profile-details" hidden></div>
       <div id="ab-toast" class="ab-toast" role="status" hidden></div>
+      <div id="ab-cal-tooltip" class="ab-cal-tooltip" role="tooltip" hidden></div>
+      <div id="ab-loader" class="ab-loader-overlay" role="status" aria-live="polite" aria-label="Loading ArBetter"${state.loading ? '' : ' hidden'}>
+      <div class="ab-spinner" aria-hidden="true">
+      <span class="ab-spinner-circle ab-circle-top"></span>
+      <span class="ab-spinner-circle ab-circle-right"></span>
+      <span class="ab-spinner-circle ab-circle-bottom"></span>
+      <span class="ab-spinner-circle ab-circle-left"></span>
+      </div>
+      </div>
       <main class="ab-main">
         <section class="ab-card">
-          <div class="ab-card-head">
-            <h2>Timetable</h2>
+        <div class="ab-card-head">
+          <h2>Timetable</h2>
+          <div class="ab-calendar-nav">
+            <button type="button" id="ab-cal-prev" class="ab-nav-btn">‹</button>
             <span id="ab-calendar-date" class="ab-muted"></span>
+            <button type="button" id="ab-cal-next" class="ab-nav-btn">›</button>
           </div>
+        </div>
+
           <div class="ab-table-wrap">
             <table class="calendar-table">
               <thead><tr><th>Time</th><th>Subject / Title</th><th>Room</th></tr></thead>
@@ -396,8 +781,17 @@
 
   const ensureUI = () => {
     if (!state.active) return;
-    if (document.body) buildUI();
-    else document.addEventListener('DOMContentLoaded', buildUI, { once: true });
+    if (document.body) {
+      buildUI();
+      return;
+    }
+    const obs = new MutationObserver(() => {
+      if (document.body) {
+        obs.disconnect();
+        buildUI();
+      }
+    });
+    obs.observe(html, { childList: true });
   };
 
   const renderAll = () => {
@@ -410,6 +804,79 @@
 
   /* ---------- Events ---------- */
   const bindEvents = (root, fab) => {
+    const goCalendar = (dir) => {
+      const days = Array.from(new Set(state.calendar.map((i) => i.dayKey))).sort();
+      if (!days.length) return;
+
+      const current = state.currentCalendarDay || todayKey();
+      let idx = days.indexOf(current);
+      if (idx < 0) idx = 0;
+
+      idx = Math.max(0, Math.min(days.length - 1, idx + dir));
+      state.currentCalendarDay = days[idx];
+      renderCalendar();
+    };
+
+    $('ab-cal-prev')?.addEventListener('click', () => goCalendar(-1));
+    $('ab-cal-next')?.addEventListener('click', () => goCalendar(1));
+    const calBody = $('ab-calendar-body');
+    const calTip = $('ab-cal-tooltip');
+
+    const hideCalTooltip = () => {
+      if (calTip) calTip.hidden = true;
+    };
+
+      const showCalTooltip = (row) => {
+        if (!calTip || !row) return;
+        const idx = Number(row.dataset.calIdx);
+        const day = state.currentCalendarDay || todayKey();
+        const dayEvents = state.calendar
+        .filter((i) => i.dayKey === day)
+        .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+        const ev = dayEvents[idx];
+        if (!ev) return;
+
+        const d = ev.details || (ev.eventId && tooltipCache.get(ev.eventId)) || {};
+        const rows = [
+          d.date ? ['Date', d.date] : ['Time', ev.time],
+          (d.location || ev.room) ? ['Location', d.location || ev.room] : null,
+ d.staff ? ['Staff', d.staff] : null
+        ].filter(Boolean);
+
+        if (!rows.length) return;
+
+        calTip.innerHTML = `
+        <div class="ab-cal-tip-title">${esc(d.title || ev.title)}</div>
+        <dl class="ab-cal-tip-list">
+        ${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
+        </dl>
+        `;
+        calTip.hidden = false;
+
+        const rect = row.getBoundingClientRect();
+        const tipRect = calTip.getBoundingClientRect();
+        const left = Math.min(window.innerWidth - tipRect.width - 12, Math.max(12, rect.left + 16));
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const top = spaceBelow >= tipRect.height + 12
+        ? rect.bottom + 6
+        : Math.max(12, rect.top - tipRect.height - 6);
+
+        calTip.style.left = `${left}px`;
+        calTip.style.top = `${top}px`;
+      };
+
+      calBody?.addEventListener('mouseover', (e) => {
+        const row = e.target.closest('tr[data-cal-idx]');
+        if (row) showCalTooltip(row);
+      });
+        calBody?.addEventListener('mouseout', (e) => {
+          if (!calBody.contains(e.relatedTarget)) hideCalTooltip();
+        });
+          calBody?.addEventListener('click', (e) => {
+            const row = e.target.closest('tr[data-cal-idx]');
+            if (row) showCalTooltip(row);
+          });
+            window.addEventListener('scroll', hideCalTooltip, { passive: true });
     $('ab-avatar-btn').addEventListener('click', () => {
       const details = $('ab-profile-details');
       const expanded = $('ab-avatar-btn').getAttribute('aria-expanded') === 'true';
@@ -493,16 +960,18 @@
   const showNative = () => {
     state.nativeView = true;
     html.classList.remove(CLS_MINIMAL);
+    restoreBranding();
     const fab = $(FAB_ID);
     if (fab) fab.hidden = false;
   };
 
-  const showMinimal = () => {
-    state.nativeView = false;
-    html.classList.add(CLS_MINIMAL);
-    const fab = $(FAB_ID);
-    if (fab) fab.hidden = true;
-  };
+    const showMinimal = () => {
+      state.nativeView = false;
+      html.classList.add(CLS_MINIMAL);
+      applyBranding();
+      const fab = $(FAB_ID);
+      if (fab) fab.hidden = true;
+    };
 
   /* ---------- Theme ---------- */
   const isDark = () => html.classList.contains(CLS_PAGE_DARK);
@@ -553,28 +1022,37 @@
   const renderCalendar = () => {
     const body = $('ab-calendar-body');
     if (!body) return;
+
     const today = todayKey();
-    let day = today;
-    let list = state.calendar.filter((i) => i.dayKey === today);
-    if (!list.length) {
-      const next = state.calendar.find((i) => i.dayKey > today);
-      if (next) {
-        day = next.dayKey;
-        list = state.calendar.filter((i) => i.dayKey === day);
-      }
+    const days = Array.from(new Set(state.calendar.map((i) => i.dayKey))).sort();
+
+    if (!days.length) {
+      $('ab-calendar-date').textContent = '';
+      body.innerHTML = '<tr><td colspan="3" class="ab-empty">No timetabled lessons.</td></tr>';
+      return;
     }
-    $('ab-calendar-date').textContent = list.length
-      ? formatDay(day) + (day === today ? ' (today)' : '')
-      : '';
+
+    let dayIndex = days.indexOf(state.currentCalendarDay || today);
+    if (dayIndex < 0) dayIndex = days.indexOf(today);
+    if (dayIndex < 0) dayIndex = 0;
+
+    state.currentCalendarDay = days[dayIndex];
+    const day = state.currentCalendarDay;
+    const list = state.calendar
+    .filter((i) => i.dayKey === day)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+    $('ab-calendar-date').textContent = formatDay(day) + (day === today ? ' (today)' : '');
 
     body.innerHTML = list.length
-      ? list.map((i) => `<tr>
-          <td class="ab-nowrap">${esc(i.time)}</td>
-          <td>${esc(i.title)}</td>
-          <td>${esc(i.room || '—')}</td>
-        </tr>`).join('')
-      : '<tr><td colspan="3" class="ab-empty">No timetabled lessons.</td></tr>';
+    ? list.map((i, idx) => `<tr class="ab-cal-row" data-cal-idx="${idx}">
+    <td class="ab-nowrap">${esc(i.time)}</td>
+    <td>${esc(i.title)}</td>
+    <td>${esc(i.room || '—')}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="3" class="ab-empty">No timetabled lessons.</td></tr>';
   };
+
 
   const renderKpis = () => {
     const body = $('ab-kpi-body');
@@ -605,25 +1083,29 @@
     const items = isActiveTab ? active : done;
 
     list.innerHTML = items.length
-      ? items.map((a) => {
-          const overdue = isActiveTab && a.dueKey && a.dueKey < today;
-          const meta = [
-            a.dueLabel ? `Due ${a.dueLabel}` : 'No due date',
-            a.description
-          ].filter(Boolean).join(' · ');
-          return `<li class="ab-assignment${overdue ? ' is-overdue' : ''}${isActiveTab ? '' : ' is-done'}">
-            <label class="ab-check">
-              <input type="checkbox" data-id="${esc(a.id)}" ${isActiveTab ? '' : 'checked'}
-                aria-label="Mark ${esc(a.title)} as ${isActiveTab ? 'completed' : 'active'}">
-            </label>
-            <div class="ab-a-body">
-              <div class="ab-a-title">${esc(a.title)}</div>
-              <div class="ab-a-meta">${esc(meta)}</div>
-            </div>
-            ${overdue ? '<span class="ab-chip ab-chip-danger">Overdue</span>' : ''}
-          </li>`;
-        }).join('')
-      : `<li class="ab-empty">${isActiveTab ? 'No active assignments.' : 'Nothing completed yet.'}</li>`;
+    ? items.map((a) => {
+      const submitted = Boolean(a.submitted);
+      const overdue = isActiveTab && !submitted && a.dueKey && a.dueKey < today;
+      const meta = [
+        a.dueLabel ? `Due ${a.dueLabel}` : 'No due date',
+        a.description
+      ].filter(Boolean).join(' · ');
+      const badge = submitted
+      ? '<span class="ab-chip ab-chip-success">Submitted</span>'
+      : (overdue ? '<span class="ab-chip ab-chip-danger">Overdue</span>' : '');
+      return `<li class="ab-assignment${submitted ? ' is-submitted' : ''}${overdue ? ' is-overdue' : ''}${isActiveTab ? '' : ' is-done'}">
+      <label class="ab-check">
+      <input type="checkbox" data-id="${esc(a.id)}" ${isActiveTab ? '' : 'checked'}
+      aria-label="Mark ${esc(a.title)} as ${isActiveTab ? 'completed' : 'active'}">
+      </label>
+      <div class="ab-a-body">
+      <div class="ab-a-title">${esc(a.title)}</div>
+      <div class="ab-a-meta">${esc(meta)}</div>
+      </div>
+      ${badge}
+      </li>`;
+    }).join('')
+    : `<li class="ab-empty">${isActiveTab ? 'No active assignments.' : 'Nothing completed yet.'}</li>`;
   };
 
   /* ---------- Completed-state persistence ---------- */
@@ -646,7 +1128,13 @@
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync' && changes[KEY_COMPLETED]) {
+    if (area !== 'sync') return;
+    if (changes[KEY_ENABLED]) {
+      const enabled = changes[KEY_ENABLED].newValue !== false;
+      setLS(KEY_CACHE_ENABLED, String(enabled));
+      if (enabled) enable(); else disable();
+    }
+    if (changes[KEY_COMPLETED]) {
       state.completed = changes[KEY_COMPLETED].newValue || {};
       renderAssignments();
     }

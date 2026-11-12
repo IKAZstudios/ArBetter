@@ -14,20 +14,25 @@
   const PROFILE_RE = /\/students\/(student\/(profile|details|info|summary)|home-ui\/(profile|header|user))|\/(user|users)\/(profile|current|me)\b/i;
 
   const PASSIVE_ROUTES = [
-    { type: 'calendar', test: (p) => p.includes('/students/widget-data/get-calendar-data/') },
+    { type: 'calendar', test: (p) => p.includes('/students/widget-data/get-calendar-data/') || p.includes('/calendar-entry/list-static/') },
+    //{ type: 'calendar', test: (p) => p.includes('/calendar-entry/list-static/format/json/') },
     { type: 'kpi', test: (p) => p.includes('/students/student/kpis/') },
     { type: 'assignments', test: (p) => p.includes('/students/home-ui/assignments-due/') },
     { type: 'assignmentsOverdue', test: (p) => p.includes('/students/home-ui/assignments-overdue/') },
+    { type: 'assignmentsSubmitted', test: (p) => p.includes('/students/home-ui/assignments-submitted') },
     { type: 'profile', test: (p) => PROFILE_RE.test(p) }
   ];
 
   const PROACTIVE = [
-    { type: 'assignmentsKpi', url: '/students/student/assignments-kpi/academic-year-id/1' },
-    { type: 'assignments', url: '/students/home-ui/assignments-due/academic-year-id/1' },
-    { type: 'assignmentsOverdue', url: '/students/home-ui/assignments-overdue/academic-year-id/1?format=javascript' }
+    //{ type: 'calendar', url: '/?/my-mis-ui/calendar/' },
+    { type: 'assignmentsKpi', url: '/students/student/assignments-kpi/' },
+    { type: 'assignments', url: '/students/home-ui/assignments-due/' },
+    { type: 'assignmentsOverdue', url: '/students/home-ui/assignments-overdue/?format=javascript' }
   ];
 
 
+  const CALENDAR_PAGE_URL = '/?/my-mis-ui/calendar/';
+  const ASSIGNMENTS_SUBMITTED_PAGE_URL = '/?/students/home-ui/assignments-submitted/';
   const NOTIFICATIONS_URL = '/user-notification/get-notifications/format/json/';
 
   const nativeFetch = window.fetch.bind(window);
@@ -65,51 +70,63 @@
   };
 
   /* ---------- Passive interception: XMLHttpRequest ---------- */
-  const XHR = window.XMLHttpRequest;
-  const xhrOpen = XHR.prototype.open;
-  const xhrSend = XHR.prototype.send;
+  /* ---------- Passive interception: XHR & fetch ---------- */
+  const hookWindow = (win, onCaptured) => {
+    if (!win || win.__arbetterHooked) return;
+    win.__arbetterHooked = true;
 
-  XHR.prototype.open = function (method, url, ...rest) {
-    this.__arbetterPath = pathOf(url);
-    return xhrOpen.call(this, method, url, ...rest);
-  };
+    const XHR = win.XMLHttpRequest;
+    const xhrOpen = XHR.prototype.open;
+    const xhrSend = XHR.prototype.send;
 
-  XHR.prototype.send = function (...args) {
-    const path = this.__arbetterPath;
-    if (path && routeFor(path)) {
-      this.addEventListener('load', () => {
-        if (this.status < 200 || this.status >= 300) return;
-        try {
-          let data = null;
-          if (this.responseType === 'json') {
-            data = this.response;
-          } else if (this.responseType === '' || this.responseType === 'text') {
-            data = JSON.parse(this.responseText);
-          }
-          forward(path, data);
-        } catch (_) { /* non-JSON response: ignore */ }
-      });
-    }
-    return xhrSend.apply(this, args);
-  };
+    XHR.prototype.open = function (method, url, ...rest) {
+      this.__arbetterPath = pathOf(url);
+      return xhrOpen.call(this, method, url, ...rest);
+    };
 
-  /* ---------- Passive interception: fetch ---------- */
-  window.fetch = function (input, init) {
-    const raw = typeof input === 'string' ? input : (input && input.url) || String(input);
-    const path = pathOf(raw);
-    const promise = nativeFetch(input, init);
-    const type = routeFor(path);
+    XHR.prototype.send = function (...args) {
+      const path = this.__arbetterPath;
+      if (path && routeFor(path)) {
+        this.addEventListener('load', () => {
+          if (this.status < 200 || this.status >= 300) return;
+          try {
+            let data = null;
+            if (this.responseType === 'json') {
+              data = this.response;
+            } else if (this.responseType === '' || this.responseType === 'text') {
+              data = JSON.parse(this.responseText);
+            }
+            forward(path, data);
+            if (onCaptured) onCaptured(path);
+          } catch (_) { /* non-JSON response: ignore */ }
+        });
+      }
+      return xhrSend.apply(this, args);
+    };
 
-    if (type) {
-      promise
+    const winFetch = win.fetch.bind(win);
+    win.fetch = function (input, init) {
+      const raw = typeof input === 'string' ? input : (input && input.url) || String(input);
+      const path = pathOf(raw);
+      const promise = winFetch(input, init);
+      const type = routeFor(path);
+
+      if (type) {
+        promise
         .then((res) => {
           if (!res.ok) return null;
-          return res.clone().json().then((data) => forward(path, data));
+          return res.clone().json().then((data) => {
+            forward(path, data);
+            if (onCaptured) onCaptured(path);
+          });
         })
         .catch(() => { /* ignore parse errors */ });
-    }
-    return promise;
+      }
+      return promise;
+    };
   };
+
+  hookWindow(window);
 
   /* ---------- Proactive background fetches ---------- */
   const getJson = (url) => nativeFetch(url, {
@@ -123,12 +140,54 @@
 
   let proactiveScheduled = false;
 
+  const loadHiddenPage = (pageUrl, pageSlug, apiSegment, actionName) => {
+    if (window.location.href.includes(pageSlug)) return;
+
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+
+    let cleaned = false;
+    const cleanup = (timedOut = false) => {
+      if (cleaned) return;
+      cleaned = true;
+      clearInterval(poll);
+      clearTimeout(timeout);
+      frame.remove();
+      if (timedOut && actionName) {
+        post('error', { action: actionName, message: 'timeout' }, { url: pageUrl });
+      }
+    };
+
+    const poll = setInterval(() => {
+      try {
+        const win = frame.contentWindow;
+        if (win && win.location.href !== 'about:blank') {
+          hookWindow(win, (path) => {
+            if (path.includes(apiSegment)) cleanup(false);
+          });
+        }
+      } catch (_) { /* cross-origin or mid-navigation */ }
+    }, 10);
+
+    const timeout = setTimeout(() => cleanup(true), 15000);
+    frame.src = pageUrl;
+    (document.body || document.documentElement).appendChild(frame);
+  };
+
   const runProactive = () => {
     PROACTIVE.forEach(({ type, url }) => {
       getJson(url)
-        .then((data) => post(type, data, { url }))
-        .catch((err) => post('error', { action: type, message: String(err && err.message || err) }, { url }));
+      .then((data) => post(type, data, { url }))
+      .catch((err) => post('error', { action: type, message: String(err && err.message || err) }, { url }));
     });
+    loadHiddenPage(CALENDAR_PAGE_URL, '/my-mis-ui/calendar', '/calendar-entry/list-static/', 'calendar');
+    loadHiddenPage(
+      ASSIGNMENTS_SUBMITTED_PAGE_URL,
+      '/students/home-ui/assignments-submitted',
+      '/students/home-ui/assignments-submitted',
+      'assignmentsSubmitted'
+    );
   };
 
   const scheduleProactive = () => {

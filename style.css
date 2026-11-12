@@ -41,6 +41,8 @@ html.arbetter-minimal.arbetter-dark body {
   --ab-primary-contrast: #ffffff;
   --ab-danger: #dc2626;
   --ab-danger-bg: #fef2f2;
+  --ab-success: #16a34a;
+  --ab-success-bg: #f0fdf4;
   --ab-badge: #ef4444;
   --ab-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
   --ab-radius: 12px;
@@ -71,6 +73,8 @@ html.arbetter-minimal.arbetter-dark body {
   --ab-primary-contrast: #0f1115;
   --ab-danger: #f87171;
   --ab-danger-bg: #3b1116;
+  --ab-success: #4ade80;
+  --ab-success-bg: #0f2e1c;
   --ab-badge: #f87171;
   --ab-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
@@ -299,6 +303,29 @@ html.arbetter-minimal.arbetter-dark body {
   justify-content: space-between;
   gap: 8px;
 }
+.arbetter-root .ab-calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arbetter-root .ab-nav-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--ab-border);
+  border-radius: 8px;
+  background: var(--ab-surface-alt);
+  color: var(--ab-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.arbetter-root .ab-nav-btn:hover {
+  background: var(--ab-primary-soft);
+}
+
 
 .arbetter-root .ab-table-wrap {
   overflow-x: auto;
@@ -422,6 +449,17 @@ html.arbetter-minimal.arbetter-dark body {
   color: var(--ab-danger);
 }
 
+/* Submitted: green styling for handed-in assignments. */
+.arbetter-root .ab-assignment.is-submitted {
+  background: var(--ab-success-bg);
+  border-color: var(--ab-success);
+  border-left-color: var(--ab-success);
+}
+
+.arbetter-root .ab-assignment.is-submitted .ab-a-meta {
+  color: var(--ab-success);
+}
+
 .arbetter-root .ab-check {
   display: flex;
   align-items: center;
@@ -467,6 +505,11 @@ html.arbetter-minimal.arbetter-dark body {
 .arbetter-root .ab-chip-danger {
   color: #ffffff;
   background: var(--ab-danger);
+}
+
+.arbetter-root .ab-chip-success {
+  color: var(--ab-primary-contrast);
+  background: var(--ab-success);
 }
 
 .arbetter-root .ab-assignment-list .ab-empty {
@@ -556,6 +599,59 @@ html.arbetter-minimal.arbetter-dark body {
   filter: brightness(1.08);
 }
 
+/* Warning banner shown when the user is not on the Arbor homepage. */
+.arbetter-home-banner {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483646;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 40px);
+  padding: 12px 16px;
+  border: 1px solid #e3e7ee;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1d2330;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.18);
+}
+
+html.arbetter-dark .arbetter-home-banner {
+  background: #181b22;
+  color: #e6e8ec;
+  border-color: #2a2f3a;
+}
+
+.arbetter-banner-logo {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.arbetter-banner-text {
+  font-weight: 500;
+}
+
+.arbetter-banner-btn {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: #4f46e5;
+  color: #ffffff !important;
+  font-weight: 600;
+  text-decoration: none !important;
+  white-space: nowrap;
+}
+
+.arbetter-banner-btn:hover {
+  filter: brightness(1.08);
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
   .arbetter-root .ab-header {
@@ -577,11 +673,144 @@ html.arbetter-minimal.arbetter-dark body {
   }
 }
 
+/* ---------- Loading spinner overlay ---------- */
+.arbetter-root .ab-loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ab-bg);
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.arbetter-root .ab-loader-overlay.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.arbetter-root .ab-spinner {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  animation: ab-spinner-rotate 2.4s linear infinite;
+}
+
+.arbetter-root .ab-spinner-circle {
+  position: absolute;
+  width: 50%;
+  height: 50%;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.arbetter-root .ab-circle-top {
+  top: 0;
+  left: 25%;
+  background: #9c00ff;
+  animation: ab-circle-top-in-out 1.6s ease-in-out infinite;
+}
+
+.arbetter-root .ab-circle-right {
+  top: 25%;
+  right: 0;
+  background: #5200de;
+  animation: ab-circle-right-in-out 1.6s ease-in-out infinite;
+}
+
+.arbetter-root .ab-circle-bottom {
+  bottom: 0;
+  left: 25%;
+  background: #001fff;
+  animation: ab-circle-bottom-in-out 1.6s ease-in-out infinite;
+}
+
+.arbetter-root .ab-circle-left {
+  top: 25%;
+  left: 0;
+  background: #ff0000;
+  animation: ab-circle-left-in-out 1.6s ease-in-out infinite;
+}
+
+@keyframes ab-spinner-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes ab-circle-top-in-out {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(50%); }
+}
+
+@keyframes ab-circle-right-in-out {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-50%); }
+}
+
+@keyframes ab-circle-bottom-in-out {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-50%); }
+}
+
+@keyframes ab-circle-left-in-out {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(50%); }
+}
+
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .arbetter-root .ab-badge,
-  .arbetter-root .ab-icon-btn.has-unread {
+  .arbetter-root .ab-icon-btn.has-unread,
+  .arbetter-root .ab-spinner,
+  .arbetter-root .ab-spinner-circle {
     animation: none;
   }
 }
 
+.arbetter-root .ab-cal-row {
+  cursor: pointer;
+}
+
+.arbetter-root .ab-cal-row:hover {
+  background: var(--ab-primary-soft) !important;
+}
+
+.arbetter-root .ab-cal-tooltip {
+  position: fixed;
+  z-index: 30;
+  max-width: 320px;
+  padding: 10px 12px;
+  background: var(--ab-surface);
+  color: var(--ab-text);
+  border: 1px solid var(--ab-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.arbetter-root .ab-cal-tip-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--ab-primary);
+}
+
+.arbetter-root .ab-cal-tip-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 10px;
+  margin: 0;
+}
+
+.arbetter-root .ab-cal-tip-list dt {
+  color: var(--ab-muted);
+  font-weight: 600;
+}
+
+.arbetter-root .ab-cal-tip-list dd {
+  margin: 0;
+}

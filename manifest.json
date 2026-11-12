@@ -16,7 +16,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["inject.js", "arbetter_logo.png"],
+      "resources": ["inject.js", "arbetter_logo.png", "icon32.png"],
       "matches": ["*://*.arbor.education/*"]
     }
   ],
