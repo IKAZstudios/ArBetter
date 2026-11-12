@@ -13,7 +13,6 @@ Overhauls the UI of the Arbor Education student portal. Chromium based browsers 
 7. Visit the arbor website and log in.
 
 # Known Limitations (may be fixed in the future)
-- Calendar only displays current day.
 - Student name and profile not loaded.
 - Actual notification content cannot be loaded, only the presence of notifications.
 - You must be at the home page for everything to load.
