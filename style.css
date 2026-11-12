@@ -819,3 +819,118 @@ html.arbetter-dark .arbetter-home-banner {
 .arbetter-root .ab-cal-tip-list dd {
   margin: 0;
 }
+/* ---------- Custom accent color presets ---------- */
+html[data-accent="blue"],
+.arbetter-root[data-accent="blue"] {
+  --ab-primary: #2563eb;
+  --ab-primary-soft: #eff6ff;
+}
+.arbetter-root.dark-mode[data-accent="blue"] {
+  --ab-primary: #60a5fa;
+  --ab-primary-soft: #172554;
+}
+
+html[data-accent="teal"],
+.arbetter-root[data-accent="teal"] {
+  --ab-primary: #0d9488;
+  --ab-primary-soft: #f0fdfa;
+}
+.arbetter-root.dark-mode[data-accent="teal"] {
+  --ab-primary: #2dd4bf;
+  --ab-primary-soft: #134e4a;
+}
+
+html[data-accent="emerald"],
+.arbetter-root[data-accent="emerald"] {
+  --ab-primary: #059669;
+  --ab-primary-soft: #ecfdf5;
+}
+.arbetter-root.dark-mode[data-accent="emerald"] {
+  --ab-primary: #34d399;
+  --ab-primary-soft: #064e3b;
+}
+
+html[data-accent="amber"],
+.arbetter-root[data-accent="amber"] {
+  --ab-primary: #d97706;
+  --ab-primary-soft: #fffbeb;
+}
+.arbetter-root.dark-mode[data-accent="amber"] {
+  --ab-primary: #fbbf24;
+  --ab-primary-soft: #451a03;
+}
+
+html[data-accent="rose"],
+.arbetter-root[data-accent="rose"] {
+  --ab-primary: #e11d48;
+  --ab-primary-soft: #fff1f2;
+}
+.arbetter-root.dark-mode[data-accent="rose"] {
+  --ab-primary: #fb7185;
+  --ab-primary-soft: #4c0519;
+}
+
+html[data-accent="violet"],
+.arbetter-root[data-accent="violet"] {
+  --ab-primary: #7c3aed;
+  --ab-primary-soft: #f5f3ff;
+}
+.arbetter-root.dark-mode[data-accent="violet"] {
+  --ab-primary: #a78bfa;
+  --ab-primary-soft: #2e1065;
+}
+
+.arbetter-fab,
+.arbetter-banner-btn {
+  background: var(--ab-primary, #4f46e5);
+}
+
+/* ---------- Accent picker popover ---------- */
+.arbetter-root .ab-accent-wrap {
+  position: relative;
+}
+
+.arbetter-root .ab-accent-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  padding: 10px 12px;
+  border: 1px solid var(--ab-border);
+  border-radius: 12px;
+  background: var(--ab-surface);
+  box-shadow: 0 10px 25px rgba(16, 24, 40, 0.16);
+  white-space: nowrap;
+}
+
+.arbetter-root .ab-accent-label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ab-muted);
+}
+
+.arbetter-root .ab-accent-swatches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arbetter-root .ab-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--swatch);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.arbetter-root .ab-swatch:hover {
+  transform: scale(1.12);
+}
+
+.arbetter-root .ab-swatch.is-selected {
+  box-shadow: 0 0 0 2px var(--ab-surface), 0 0 0 4px var(--swatch);
+}

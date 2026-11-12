@@ -9,8 +9,20 @@
   const CLS_PAGE_DARK = 'arbetter-dark';
   const KEY_CACHE_ENABLED = 'arbetter-enabled-cache';
   const KEY_DARK = 'arbetter-dark-mode';
+  const KEY_ACCENT = 'arbetter-accent';
+  const KEY_ACCENT_SYNC = 'accentColor';
   const KEY_ENABLED = 'enabled';
   const KEY_COMPLETED = 'completedAssignments';
+
+  const ACCENT_PRESETS = [
+    { id: 'indigo', label: 'Indigo (Default)', swatch: '#4f46e5' },
+ { id: 'blue', label: 'Ocean Blue', swatch: '#2563eb' },
+ { id: 'teal', label: 'Teal', swatch: '#0d9488' },
+ { id: 'emerald', label: 'Emerald', swatch: '#059669' },
+ { id: 'amber', label: 'Amber', swatch: '#d97706' },
+ { id: 'rose', label: 'Rose', swatch: '#e11d48' },
+ { id: 'violet', label: 'Violet', swatch: '#7c3aed' }
+  ];
   const MAX_COMPLETED = 300;
   const OUT = 'ARBETTER_CONTENT';
   const IN = 'ARBETTER_INJECT';
@@ -95,6 +107,8 @@
     if (Object.values(state.loaded).every(Boolean)) hideLoader();
   };
 
+    const cachedAccent = getLS(KEY_ACCENT);
+    if (cachedAccent) html.dataset.accent = cachedAccent;
     if (getLS(KEY_DARK) === 'true') html.classList.add(CLS_PAGE_DARK);
     if (state.active) html.classList.add(CLS_MINIMAL);
 
@@ -735,37 +749,52 @@
 
   /* ---------- UI construction ---------- */
   const ICON_BELL = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11c0-3.07-1.64-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>';
+  const ICON_PALETTE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0 0 20 1.5 1.5 0 0 0 1.5-1.5c0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99a1.5 1.5 0 0 1 1.5-1.5H16a6 6 0 0 0 6-6c0-4.96-4.48-9-10-9zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>';
   const ICON_MOON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 
   const buildUI = () => {
     if ($(ROOT_ID) || !document.body) return;
 
+    const swatchButtons = ACCENT_PRESETS.map((p) => `
+    <button type="button" class="ab-swatch" data-accent-choice="${esc(p.id)}"
+    style="--swatch:${esc(p.swatch)}" aria-label="${esc(p.label)}" title="${esc(p.label)}"></button>
+    `).join('');
+
     const root = document.createElement('div');
     root.id = ROOT_ID;
     root.className = 'arbetter-root';
     root.innerHTML = `
-      <header class="ab-header">
-        <div class="ab-brand">
-          <img class="ab-logo" src="${LOGO_URL}" alt="">
-          <span class="ab-title">ArBetter</span>
-        </div>
-        <div class="ab-profile">
-          <button type="button" id="ab-avatar-btn" class="ab-avatar-btn" aria-expanded="false" aria-controls="ab-profile-details" title="Show profile details">
-            <img id="ab-avatar" class="ab-avatar" alt="" hidden>
-            <span id="ab-avatar-fallback" class="ab-avatar ab-avatar-fallback">?</span>
-          </button>
-          <span id="ab-student-name" class="ab-student-name">Loading…</span>
-        </div>
-        <div class="ab-header-actions">
-          <button type="button" id="ab-notif-btn" class="ab-icon-btn" aria-label="Notifications" title="Notifications">
-            ${ICON_BELL}
-            <span id="ab-badge" class="ab-badge" hidden></span>
-          </button>
-          <button type="button" id="ab-theme-btn" class="ab-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Toggle dark mode">
-            ${ICON_MOON}
-          </button>
-        </div>
-      </header>
+    <header class="ab-header">
+    <div class="ab-brand">
+    <img class="ab-logo" src="${LOGO_URL}" alt="">
+    <span class="ab-title">ArBetter</span>
+    </div>
+    <div class="ab-profile">
+    <button type="button" id="ab-avatar-btn" class="ab-avatar-btn" aria-expanded="false" aria-controls="ab-profile-details" title="Show profile details">
+    <img id="ab-avatar" class="ab-avatar" alt="" hidden>
+    <span id="ab-avatar-fallback" class="ab-avatar ab-avatar-fallback">?</span>
+    </button>
+    <span id="ab-student-name" class="ab-student-name">Loading…</span>
+    </div>
+    <div class="ab-header-actions">
+    <button type="button" id="ab-notif-btn" class="ab-icon-btn" aria-label="Notifications" title="Notifications">
+    ${ICON_BELL}
+    <span id="ab-badge" class="ab-badge" hidden></span>
+    </button>
+    <div class="ab-accent-wrap">
+    <button type="button" id="ab-accent-btn" class="ab-icon-btn" aria-haspopup="true" aria-expanded="false" aria-controls="ab-accent-popover" aria-label="Change accent color" title="Change accent color">
+    ${ICON_PALETTE}
+    </button>
+    <div id="ab-accent-popover" class="ab-accent-popover" role="group" aria-label="Accent colors" hidden>
+    <div class="ab-accent-label">Accent color</div>
+    <div class="ab-accent-swatches">${swatchButtons}</div>
+    </div>
+    </div>
+    <button type="button" id="ab-theme-btn" class="ab-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Toggle dark mode">
+    ${ICON_MOON}
+    </button>
+    </div>
+    </header>
       <div id="ab-profile-details" class="ab-profile-details" hidden></div>
       <div id="ab-toast" class="ab-toast" role="status" hidden></div>
       <div id="ab-cal-tooltip" class="ab-cal-tooltip" role="tooltip" hidden></div>
@@ -835,6 +864,7 @@
 
     bindEvents(root, fab);
     applyTheme(isDark());
+    applyAccent(getAccent());
     renderAll();
   };
 
@@ -952,8 +982,35 @@
 
     $('ab-notif-btn').addEventListener('click', onNotifClick);
 
-    $('ab-theme-btn').addEventListener('click', () => applyTheme(!isDark()));
+    const accentBtn = $('ab-accent-btn');
+    const accentPopover = $('ab-accent-popover');
+    const setAccentMenuOpen = (open) => {
+      if (!accentBtn || !accentPopover) return;
+      accentPopover.hidden = !open;
+      accentBtn.setAttribute('aria-expanded', String(open));
+    };
 
+    accentBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setAccentMenuOpen(accentPopover.hidden);
+    });
+
+    accentPopover?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const swatch = e.target.closest('[data-accent-choice]');
+      if (!swatch) return;
+      const choice = swatch.dataset.accentChoice;
+      applyAccent(choice);
+      chrome.storage.sync.set({ [KEY_ACCENT_SYNC]: choice });
+      setAccentMenuOpen(false);
+    });
+
+    document.addEventListener('click', () => setAccentMenuOpen(false));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setAccentMenuOpen(false);
+    });
+
+      $('ab-theme-btn').addEventListener('click', () => applyTheme(!isDark()));
     root.querySelectorAll('.ab-tab').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.tab = btn.dataset.tab;
@@ -1049,6 +1106,23 @@
     const btn = $('ab-theme-btn');
     if (btn) btn.setAttribute('aria-pressed', String(dark));
     setLS(KEY_DARK, String(dark));
+  };
+  const validAccent = (id) => (ACCENT_PRESETS.some((p) => p.id === id) ? id : 'indigo');
+
+  const getAccent = () => validAccent(html.dataset.accent || getLS(KEY_ACCENT));
+
+  const applyAccent = (id) => {
+    const chosen = validAccent(id);
+    html.dataset.accent = chosen;
+    const root = $(ROOT_ID);
+    if (root) root.dataset.accent = chosen;
+    setLS(KEY_ACCENT, chosen);
+
+    document.querySelectorAll('.ab-swatch').forEach((btn) => {
+      const active = btn.dataset.accentChoice === chosen;
+      btn.classList.toggle('is-selected', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
   };
 
   /* ---------- Renderers ---------- */
@@ -1195,8 +1269,9 @@
     });
   };
 
-  chrome.storage.sync.get({ [KEY_COMPLETED]: {} }, (res) => {
+  chrome.storage.sync.get({ [KEY_COMPLETED]: {}, [KEY_ACCENT_SYNC]: '' }, (res) => {
     state.completed = res[KEY_COMPLETED] || {};
+    if (res[KEY_ACCENT_SYNC]) applyAccent(res[KEY_ACCENT_SYNC]);
     renderAssignments();
   });
 
@@ -1206,6 +1281,9 @@
       const enabled = changes[KEY_ENABLED].newValue !== false;
       setLS(KEY_CACHE_ENABLED, String(enabled));
       if (enabled) enable(); else disable();
+    }
+    if (changes[KEY_ACCENT_SYNC] && changes[KEY_ACCENT_SYNC].newValue) {
+      applyAccent(changes[KEY_ACCENT_SYNC].newValue);
     }
     if (changes[KEY_COMPLETED]) {
       state.completed = changes[KEY_COMPLETED].newValue || {};
