@@ -33,6 +33,20 @@
   const getLS = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
   const setLS = (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* storage disabled */ } };
 
+  /* ---------- Sub-frame bridge (hooks hidden iframes at document_start) ---------- */
+  if (window !== window.top) {
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || !event.data || event.data.source !== IN) return;
+      if (event.data.type === 'ready') return;
+      window.top.postMessage(event.data, window.location.origin);
+    });
+    const s = document.createElement('script');
+    s.src = chrome.runtime.getURL('inject.js');
+    s.onload = () => s.remove();
+    (document.head || html).appendChild(s);
+    return;
+  }
+
   /* ---------- Synchronous first paint from cache ---------- */
   const cachedEnabled = getLS(KEY_CACHE_ENABLED);
   const state = {
@@ -81,13 +95,14 @@
     if (Object.values(state.loaded).every(Boolean)) hideLoader();
   };
 
-  if (getLS(KEY_DARK) === 'true') html.classList.add(CLS_PAGE_DARK);
-  if (state.active) html.classList.add(CLS_MINIMAL);
+    if (getLS(KEY_DARK) === 'true') html.classList.add(CLS_PAGE_DARK);
+    if (state.active) html.classList.add(CLS_MINIMAL);
 
-  /* ---------- Message listener (registered before injecting) ---------- */
-  window.addEventListener('message', (event) => {
-    if (event.source !== window || !event.data || event.data.source !== IN) return;
-    const { type, payload } = event.data;
+    /* ---------- Message listener (registered before injecting) ---------- */
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin || !event.data || event.data.source !== IN) return;
+      const { type, payload } = event.data;
+      if (type === 'ready' && event.source !== window) return;
 
     if (type === 'ready') {
       state.injectReady = true;
@@ -464,8 +479,10 @@
 
         let needsRender = false;
         const viewedDay = state.currentCalendarDay || todayKey();
+        const timeRange = details.date.match(/(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2})/);
         state.calendar.forEach((ev) => {
           if (ev.eventId === eventId) {
+            if (timeRange && ev.time.length <= 5) ev.time = `${timeRange[1]}–${timeRange[2]}`;
             if (!ev.room && details.room) ev.room = details.room;
             ev.details = details;
             if (ev.dayKey === viewedDay) needsRender = true;
@@ -500,6 +517,46 @@
       pumpTooltipQueue();
   };
 
+  const extractStaticEvent = (ev, dayKey) => {
+    const rawTimeEl = ev.querySelector('.mis-cal-event-time span');
+    const titleEl = ev.querySelector('.title');
+    let time = '';
+    let title = '';
+
+    if (rawTimeEl || titleEl) {
+      time = text(rawTimeEl?.textContent).trim().replace(/\s*-\s*/g, '–');
+      title = text(titleEl?.textContent).trim();
+    } else {
+      const full = text(ev.textContent).replace(/\s+/g, ' ').trim();
+      const m = full.match(/^(\d{1,2}:\d{2}(?:\s*[-–]\s*\d{1,2}:\d{2})?)\s+(.+)$/);
+      if (m) {
+        time = m[1].replace(/\s*[-–]\s*/g, '–');
+        title = m[2].trim();
+      } else {
+        title = full;
+      }
+    }
+
+    const eventId = text(ev.getAttribute('data-eventid')).trim()
+    || (text(ev.getAttribute('ajax-link')).match(/\/id\/(\d+)/) || [])[1]
+    || '';
+    const cached = eventId ? tooltipCache.get(eventId) : null;
+    const cachedTime = cached && cached.date && cached.date.match(/(\d{2}:\d{2})\s*[-–]\s*(\d{2}:\d{2})/);
+    if (cachedTime && time.length <= 5) {
+      time = `${cachedTime[1]}–${cachedTime[2]}`;
+    }
+
+    return {
+      eventId,
+      dayKey,
+      sortKey: `${dayKey} ${time || '00:00'}`,
+      time,
+      title: title || 'Untitled',
+      room: (cached && cached.room) || '',
+ details: cached || null
+    };
+  };
+
   const parseStaticCalendar = (payload) => {
     const out = [];
     const items = payload && Array.isArray(payload.items) ? payload.items : [];
@@ -516,35 +573,36 @@
         const table = doc.querySelector('table.mis-cal');
         if (!table) return;
 
-        const dayCells = Array.from(table.querySelectorAll('thead .mis-calendar-date[data-date]'));
+        // Period / month grid view: dates and events live inside <tbody> <td> cells
+        const bodyDateCells = Array.from(table.querySelectorAll('tbody td'))
+        .filter((td) => td.querySelector('.mis-calendar-date[data-date]'));
+
+        if (bodyDateCells.length) {
+          bodyDateCells.forEach((td) => {
+            const dayKey = td.querySelector('.mis-calendar-date[data-date]')?.getAttribute('data-date');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey || '')) return;
+
+            td.querySelectorAll('.mis-cal-text, .mis-cal-event').forEach((ev) => {
+              out.push(extractStaticEvent(ev, dayKey));
+            });
+          });
+          return;
+        }
+
+        // Week / multi-day view: dates in <thead>, events in corresponding <tbody> column
+        const headDateCells = Array.from(table.querySelectorAll('thead .mis-calendar-date[data-date]'));
         const bodyRow = table.querySelector('tbody tr');
         if (!bodyRow) return;
 
-        dayCells.forEach((cell) => {
+        headDateCells.forEach((cell) => {
           const dayKey = cell.getAttribute('data-date');
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey || '')) return;
 
           const colCell = bodyRow.cells[cell.cellIndex];
-          const events = colCell ? Array.from(colCell.querySelectorAll('.mis-cal-event')) : [];
+          if (!colCell) return;
 
-          events.forEach((ev) => {
-            const rawTime = text(ev.querySelector('.mis-cal-event-time span')?.textContent).trim();
-            const time = rawTime.replace(/\s*-\s*/g, '–');
-            const title = text(ev.querySelector('.title')?.textContent).trim() || 'Untitled';
-            const eventId = text(ev.getAttribute('data-eventid')).trim()
-            || (text(ev.getAttribute('ajax-link')).match(/\/id\/(\d+)/) || [])[1]
-            || '';
-            const cached = eventId ? tooltipCache.get(eventId) : null;
-
-            out.push({
-              eventId,
-              dayKey,
-              sortKey: `${dayKey} ${time || '00:00'}`,
-              time,
-              title,
-              room: (cached && cached.room) || '',
-                     details: cached || null
-            });
+          colCell.querySelectorAll('.mis-cal-event, .mis-cal-text').forEach((ev) => {
+            out.push(extractStaticEvent(ev, dayKey));
           });
         });
       });
@@ -557,11 +615,13 @@
     const byKey = new Map();
     state.calendar.forEach((i) => {
       const normTime = text(i.time).replace(/\s*[–-]\s*/g, '–');
-      const key = `${i.dayKey}|${normTime}|${i.title}`;
+      const startSlot = normTime.slice(0, 5);
+      const key = `${i.dayKey}|${startSlot}|${i.title}`;
       const existing = byKey.get(key);
       if (!existing) {
         byKey.set(key, Object.assign({}, i, { time: normTime }));
       } else {
+        if (normTime.length > existing.time.length) existing.time = normTime;
         if (!existing.room && i.room) existing.room = i.room;
         if (!existing.eventId && i.eventId) existing.eventId = i.eventId;
         if (!existing.details && i.details) existing.details = i.details;
@@ -805,19 +865,26 @@
   const bindEvents = (root, fab) => {
     const goCalendar = (dir) => {
       const days = Array.from(new Set(state.calendar.map((i) => i.dayKey))).sort();
-      if (!days.length) return;
+      if (days.length <= 1) return;
 
       const current = state.currentCalendarDay || todayKey();
       let idx = days.indexOf(current);
       if (idx < 0) idx = 0;
 
-      idx = Math.max(0, Math.min(days.length - 1, idx + dir));
-      state.currentCalendarDay = days[idx];
+      const nextIdx = Math.max(0, Math.min(days.length - 1, idx + dir));
+      if (nextIdx === idx) return;
+
+      state.currentCalendarDay = days[nextIdx];
+      const tip = $('ab-cal-tooltip');
+      if (tip) tip.hidden = true;
       renderCalendar();
     };
 
-    $('ab-cal-prev')?.addEventListener('click', () => goCalendar(-1));
-    $('ab-cal-next')?.addEventListener('click', () => goCalendar(1));
+    root.addEventListener('click', (e) => {
+      const btn = e.target.closest('#ab-cal-prev, #ab-cal-next');
+      if (!btn || btn.disabled) return;
+      goCalendar(btn.id === 'ab-cal-prev' ? -1 : 1);
+    });
     const calBody = $('ab-calendar-body');
     const calTip = $('ab-cal-tooltip');
 
@@ -1024,9 +1091,13 @@
 
     const today = todayKey();
     const days = Array.from(new Set(state.calendar.map((i) => i.dayKey))).sort();
+    const prevBtn = $('ab-cal-prev');
+    const nextBtn = $('ab-cal-next');
 
     if (!days.length) {
       $('ab-calendar-date').textContent = '';
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
       body.innerHTML = '<tr><td colspan="3" class="ab-empty">No timetabled lessons.</td></tr>';
       return;
     }
@@ -1034,6 +1105,9 @@
     let dayIndex = days.indexOf(state.currentCalendarDay || today);
     if (dayIndex < 0) dayIndex = days.indexOf(today);
     if (dayIndex < 0) dayIndex = 0;
+
+    if (prevBtn) prevBtn.disabled = dayIndex <= 0;
+    if (nextBtn) nextBtn.disabled = dayIndex >= days.length - 1;
 
     state.currentCalendarDay = days[dayIndex];
     const day = state.currentCalendarDay;

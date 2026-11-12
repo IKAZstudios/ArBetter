@@ -39,7 +39,8 @@
 
   const pathOf = (u) => {
     try {
-      return new URL(String(u), window.location.href).pathname;
+      const parsed = new URL(String(u), window.location.href);
+      return parsed.pathname + parsed.search;
     } catch (_) {
       return '';
     }
@@ -140,39 +141,56 @@
 
   let proactiveScheduled = false;
 
-  const loadHiddenPage = (pageUrl, pageSlug, apiSegment, actionName) => {
-    if (window.location.href.includes(pageSlug)) return;
+  const loadHiddenPage = (pageUrl, pageSlug, apiSegment, actionName, onDone) => {
+    if (window.location.href.includes(pageSlug)) {
+      if (onDone) onDone();
+      return;
+    }
 
     const frame = document.createElement('iframe');
     frame.setAttribute('aria-hidden', 'true');
-    frame.style.cssText = 'position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+    frame.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1024px;height:768px;border:0;opacity:0;pointer-events:none;';
 
     let cleaned = false;
+    let rafId = 0;
     const cleanup = (timedOut = false) => {
       if (cleaned) return;
       cleaned = true;
-      clearInterval(poll);
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('message', onFrameMsg);
       clearTimeout(timeout);
       frame.remove();
       if (timedOut && actionName) {
         post('error', { action: actionName, message: 'timeout' }, { url: pageUrl });
       }
+      if (onDone) onDone();
     };
 
-    const poll = setInterval(() => {
-      try {
-        const win = frame.contentWindow;
-        if (win && win.location.href !== 'about:blank') {
-          hookWindow(win, (path) => {
-            if (path.includes(apiSegment)) cleanup(false);
-          });
-        }
-      } catch (_) { /* cross-origin or mid-navigation */ }
-    }, 10);
+      const watchFrame = () => {
+        if (cleaned) return;
+        try {
+          const win = frame.contentWindow;
+          if (win && win.location.href !== 'about:blank') {
+            hookWindow(win, (path) => {
+              if (path.includes(apiSegment)) cleanup(false);
+            });
+          }
+        } catch (_) { /* mid-navigation */ }
+        rafId = requestAnimationFrame(watchFrame);
+      };
 
-    const timeout = setTimeout(() => cleanup(true), 15000);
-    frame.src = pageUrl;
-    (document.body || document.documentElement).appendChild(frame);
+      const onFrameMsg = (event) => {
+        if (event.origin !== ORIGIN || !event.data || event.data.source !== OUT) return;
+        if (typeof event.data.url === 'string' && event.data.url.includes(apiSegment)) {
+          cleanup(false);
+        }
+      };
+
+      window.addEventListener('message', onFrameMsg);
+      const timeout = setTimeout(() => cleanup(true), 15000);
+      frame.src = pageUrl;
+      (document.body || document.documentElement).appendChild(frame);
+      rafId = requestAnimationFrame(watchFrame);
   };
 
   const runProactive = () => {
@@ -181,12 +199,17 @@
       .then((data) => post(type, data, { url }))
       .catch((err) => post('error', { action: type, message: String(err && err.message || err) }, { url }));
     });
-    loadHiddenPage(CALENDAR_PAGE_URL, '/my-mis-ui/calendar', '/calendar-entry/list-static/', 'calendar');
     loadHiddenPage(
-      ASSIGNMENTS_SUBMITTED_PAGE_URL,
-      '/students/home-ui/assignments-submitted',
-      '/students/home-ui/assignments-submitted',
-      'assignmentsSubmitted'
+      CALENDAR_PAGE_URL,
+      '/my-mis-ui/calendar',
+      '/calendar-entry/list-static/',
+      'calendar',
+      () => loadHiddenPage(
+        ASSIGNMENTS_SUBMITTED_PAGE_URL,
+        '/students/home-ui/assignments-submitted',
+        '/students/home-ui/assignments-submitted',
+        'assignmentsSubmitted'
+      )
     );
   };
 

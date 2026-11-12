@@ -322,8 +322,13 @@ html.arbetter-minimal.arbetter-dark body {
   line-height: 1;
 }
 
-.arbetter-root .ab-nav-btn:hover {
+.arbetter-root .ab-nav-btn:hover:not(:disabled) {
   background: var(--ab-primary-soft);
+}
+
+.arbetter-root .ab-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 
