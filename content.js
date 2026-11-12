@@ -757,7 +757,6 @@
         <button type="button" id="ab-more-btn" class="ab-btn">See more on official page</button>
         <p id="ab-footer-text" class="ab-footer-text">This extension has some known limitations:</p>
         <ul class="ab-footer-text">
-            <li>Calendar can only view the current day</li>
             <li>Cannot load profile picture and name</li>
             <li>Notifications are not displayed only indicated</li>
         </ul>
