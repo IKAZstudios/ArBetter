@@ -5,7 +5,9 @@
   const ROOT_ID = 'arbor-minimal-container';
   const FAB_ID = 'arbetter-return-fab';
   const BANNER_ID = 'arbetter-home-banner';
+  const LOGIN_BAR_ID = 'arbetter-login-bar';
   const CLS_MINIMAL = 'arbetter-minimal';
+  const CLS_LOGIN = 'arbetter-login';
   const CLS_PAGE_DARK = 'arbetter-dark';
   const KEY_CACHE_ENABLED = 'arbetter-enabled-cache';
   const KEY_DARK = 'arbetter-dark-mode';
@@ -31,6 +33,7 @@
   const ICON32_URL = chrome.runtime.getURL('icon32.png');
   const CUSTOM_TITLE = 'ArBetter';
   const DASHBOARD_PATH = '/?/students/home-ui/dashboard';
+  const LOGIN_INDEX_PATH = '/?/home-ui/index';
   const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -107,10 +110,26 @@
     if (Object.values(state.loaded).every(Boolean)) hideLoader();
   };
 
+    const initPath = window.location.pathname;
+    const initSearch = window.location.search;
+    const isInitialLoginIndex =
+    (initPath === '/' && initSearch.startsWith('?/home-ui/index')) ||
+    initPath.startsWith('/home-ui/index');
+    const isInitialDashboard =
+    (initPath === '/' && (
+      initSearch.startsWith('?/students/home-ui/dashboard') ||
+      initSearch.startsWith('?/home-ui/dashboard')
+    )) ||
+    initPath.startsWith('/students/home-ui/dashboard') ||
+    initPath.startsWith('/home-ui/dashboard');
+
     const cachedAccent = getLS(KEY_ACCENT);
     if (cachedAccent) html.dataset.accent = cachedAccent;
     if (getLS(KEY_DARK) === 'true') html.classList.add(CLS_PAGE_DARK);
-    if (state.active) html.classList.add(CLS_MINIMAL);
+    if (state.active) {
+      if (isInitialLoginIndex) html.classList.add(CLS_LOGIN);
+      else if (isInitialDashboard) html.classList.add(CLS_MINIMAL);
+    }
 
     /* ---------- Message listener (registered before injecting) ---------- */
     window.addEventListener('message', (event) => {
@@ -317,90 +336,333 @@
     }
   };
 
-  /* ---------- Dashboard page check & warning banner ---------- */
+  /* ---------- Page & logged-out DOM detection ---------- */
   const isDashboardPage = () =>
-  (window.location.pathname === '/' && window.location.search.startsWith('?/students/home-ui/dashboard')) ||
-  window.location.pathname.startsWith('/students/home-ui/dashboard');
+  (window.location.pathname === '/' && (
+    window.location.search.startsWith('?/students/home-ui/dashboard') ||
+    window.location.search.startsWith('?/home-ui/dashboard')
+  )) ||
+  window.location.pathname.startsWith('/students/home-ui/dashboard') ||
+  window.location.pathname.startsWith('/home-ui/dashboard');
+
+  const isLoginIndexPage = () =>
+  (window.location.pathname === '/' && window.location.search.startsWith('?/home-ui/index')) ||
+  window.location.pathname.startsWith('/home-ui/index');
+
+  const LOGIN_TEXT_RE = /\b(welcome\s+to\s+arbor|first\s+time\s+logging\s+in|forgot\s+your\s+password)\b/i;
+  const LOGIN_BTN_RE = /^(log\s*in|sign\s*in)(\s+with\b.*)?$/i;
+
+  const isOwnExtensionNode = (el) =>
+  Boolean(el && el.closest && el.closest(`#${ROOT_ID}, #${BANNER_ID}, #${FAB_ID}, #${LOGIN_BAR_ID}`));
+
+  const hasLoginUI = () => {
+    const root = document.body;
+    if (!root) return false;
+
+    const inputs = root.querySelectorAll('input[type="password"], input[name="username"], input[autocomplete="current-password"]');
+    for (const inp of inputs) {
+      if (!isOwnExtensionNode(inp)) return true;
+    }
+
+    const headings = root.querySelectorAll('h1, h2, h3, [class*="title"], [class*="heading"], [class*="welcome"], [class*="login"]');
+    for (const el of headings) {
+      if (isOwnExtensionNode(el)) continue;
+      const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (txt && txt.length < 160 && LOGIN_TEXT_RE.test(txt)) return true;
+    }
+
+    const buttons = root.querySelectorAll('button, input[type="submit"], a[role="button"], a[href*="login"]');
+    for (const btn of buttons) {
+      if (isOwnExtensionNode(btn)) continue;
+      const label = (btn.tagName === 'INPUT' ? btn.value : btn.textContent || '').replace(/\s+/g, ' ').trim();
+      if (label && label.length < 60 && LOGIN_BTN_RE.test(label)) return true;
+    }
+
+    return false;
+  };
+
+  const enhanceLoginPage = () => {
+    if (!document.body || !isLoginIndexPage()) return;
+
+    // 1. Replace alt="Arbor Education" logo with ArBetter logo + text (keeping "Powered by")
+    document.querySelectorAll('img[alt="Arbor Education" i]').forEach((img) => {
+      if (isOwnExtensionNode(img) || img.dataset.arbetterLogoReplaced === 'true') return;
+      img.dataset.arbetterLogoReplaced = 'true';
+      img.src = LOGO_URL;
+      img.alt = 'ArBetter';
+      img.classList.add('ab-powered-logo');
+
+      const wrap = document.createElement('span');
+      wrap.className = 'ab-powered-brand';
+      const label = document.createElement('span');
+      label.className = 'ab-powered-title';
+      label.textContent = 'ArBetter';
+
+      img.parentNode?.insertBefore(wrap, img);
+      wrap.appendChild(img);
+      wrap.appendChild(label);
+    });
+
+    // 2. Mark only a single login card container so nested boxes don't render inside each other
+    const anchor = Array.from(document.querySelectorAll('form, input[type="password"], button, input[type="submit"], a[role="button"]'))
+    .find((el) => {
+      if (isOwnExtensionNode(el)) return false;
+      if (el.tagName === 'FORM' || el.tagName === 'INPUT') return true;
+      const lbl = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      return LOGIN_BTN_RE.test(lbl);
+    });
+
+    if (!anchor) return;
+
+    let candidate = anchor.closest('form') || anchor.parentElement;
+    let chosen = candidate;
+    while (candidate && candidate !== document.body && candidate.id !== 'root') {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.width > 0 && rect.width <= 620 && rect.height > 120 && rect.height < window.innerHeight * 0.9) {
+        chosen = candidate;
+      } else if (rect.width > 620) {
+        break;
+      }
+      candidate = candidate.parentElement;
+    }
+
+    if (chosen && chosen.getAttribute('data-ab-login-card') !== 'true') {
+      document.querySelectorAll('[data-ab-login-card]').forEach((el) => el.removeAttribute('data-ab-login-card'));
+      chosen.setAttribute('data-ab-login-card', 'true');
+    }
+  };
 
   const removeHomeWarning = () => {
     const banner = $(BANNER_ID);
     if (banner) banner.remove();
   };
 
-    const showHomeWarning = () => {
-      if (window !== window.top || isDashboardPage() || $(BANNER_ID)) return;
-      if (/\/(login|logout|auth|sso|saml|oauth)\b/i.test(window.location.href)) return;
+    const removeLoginBar = () => {
+      const bar = $(LOGIN_BAR_ID);
+      if (bar) bar.remove();
+    };
 
-      const mount = () => {
-        if (!state.active || $(BANNER_ID) || !document.body) return;
-        const banner = document.createElement('div');
-        banner.id = BANNER_ID;
-        banner.className = 'arbetter-home-banner';
-        banner.setAttribute('role', 'alert');
-        banner.innerHTML = `
-        <img class="arbetter-banner-logo" src="${LOGO_URL}" alt="">
-        <span class="arbetter-banner-text">ArBetter only works on the Arbor homepage.</span>
-        <a class="arbetter-banner-btn" href="${DASHBOARD_PATH}">Go to Homepage</a>
-        `;
-        document.body.appendChild(banner);
+      const ensureLoginBar = () => {
+        if (!state.active || !isLoginIndexPage() || $(LOGIN_BAR_ID)) return;
+
+        const mount = () => {
+          if (!state.active || !isLoginIndexPage() || $(LOGIN_BAR_ID) || !document.body) return;
+          const bar = document.createElement('header');
+          bar.id = LOGIN_BAR_ID;
+          bar.className = 'ab-login-bar';
+          bar.innerHTML = `
+          <div class="ab-brand">
+          <img class="ab-logo" src="${LOGO_URL}" alt="">
+          <span class="ab-title">ArBetter</span>
+          </div>
+          <button type="button" id="ab-login-theme-btn" class="ab-icon-btn" aria-pressed="${String(isDark())}" aria-label="Toggle dark mode" title="Toggle dark mode">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+          `;
+          document.body.prepend(bar);
+          $('ab-login-theme-btn')?.addEventListener('click', () => {
+            const nextDark = !isDark();
+            applyTheme(nextDark);
+            $('ab-login-theme-btn')?.setAttribute('aria-pressed', String(nextDark));
+          });
+        };
+
+        if (document.body) {
+          mount();
+          return;
+        }
+        const obs = new MutationObserver(() => {
+          if (document.body) {
+            obs.disconnect();
+            mount();
+          }
+        });
+        obs.observe(html, { childList: true });
       };
 
-      if (document.body) {
-        mount();
-        return;
-      }
-      const obs = new MutationObserver(() => {
-        if (document.body) {
-          obs.disconnect();
-          mount();
+      let loginRedirecting = false;
+      const redirectToLogin = () => {
+        if (loginRedirecting || window !== window.top || isLoginIndexPage()) return;
+        if (/\/(auth|sso|saml|oauth|callback)\b/i.test(window.location.pathname)) return;
+        loginRedirecting = true;
+        html.classList.remove(CLS_MINIMAL);
+        removeHomeWarning();
+        window.location.replace(`${window.location.origin}${LOGIN_INDEX_PATH}`);
+      };
+
+      let authObserver = null;
+      let spaHooked = false;
+
+      const evaluatePageAuthState = () => {
+        if (!state.active || window !== window.top) return;
+
+        if (isLoginIndexPage()) {
+          html.classList.remove(CLS_MINIMAL);
+          html.classList.add(CLS_LOGIN);
+          removeHomeWarning();
+          ensureLoginBar();
+          enhanceLoginPage();
+          return;
         }
-      });
-      obs.observe(html, { childList: true });
-    };
 
-    if (state.active) {
-      if (isDashboardPage()) {
-        applyBranding();
-      } else {
+        if (html.classList.contains(CLS_LOGIN)) {
+          html.classList.remove(CLS_LOGIN);
+          removeLoginBar();
+        }
+
+        if (hasLoginUI()) {
+          redirectToLogin();
+          return;
+        }
+
+        if (isDashboardPage()) {
+          removeHomeWarning();
+          if (!state.nativeView) {
+            html.classList.add(CLS_MINIMAL);
+            applyBranding();
+            if (!$(ROOT_ID)) ensureUI();
+            sendConfig();
+          }
+          return;
+        }
+
         html.classList.remove(CLS_MINIMAL);
-        showHomeWarning();
+      };
+
+      const hookSpaNavigation = () => {
+        if (spaHooked) return;
+        spaHooked = true;
+        const wrapHistory = (fnName) => {
+          const orig = history[fnName];
+          if (typeof orig !== 'function') return;
+          history[fnName] = function (...args) {
+            const res = orig.apply(this, args);
+            setTimeout(evaluatePageAuthState, 0);
+            return res;
+          };
+        };
+        wrapHistory('pushState');
+        wrapHistory('replaceState');
+        window.addEventListener('popstate', () => setTimeout(evaluatePageAuthState, 0));
+        window.addEventListener('hashchange', () => setTimeout(evaluatePageAuthState, 0));
+      };
+
+      const startAuthWatcher = () => {
+        hookSpaNavigation();
+        evaluatePageAuthState();
+        if (authObserver) return;
+        authObserver = new MutationObserver(() => evaluatePageAuthState());
+        authObserver.observe(html, { childList: true, subtree: true, characterData: true });
+      };
+
+      const stopAuthWatcher = () => {
+        if (authObserver) {
+          authObserver.disconnect();
+          authObserver = null;
+        }
+      };
+
+      const showHomeWarning = () => {
+        if (window !== window.top || isDashboardPage() || isLoginIndexPage() || $(BANNER_ID)) return;
+        if (hasLoginUI() || loginRedirecting) return;
+        if (/\/(login|logout|auth|sso|saml|oauth)\b/i.test(window.location.href)) return;
+
+        const mount = () => {
+          if (!state.active || isDashboardPage() || isLoginIndexPage() || hasLoginUI() || $(BANNER_ID) || !document.body) return;
+          const banner = document.createElement('div');
+          banner.id = BANNER_ID;
+          banner.className = 'arbetter-home-banner';
+          banner.setAttribute('role', 'alert');
+          banner.innerHTML = `
+          <img class="arbetter-banner-logo" src="${LOGO_URL}" alt="">
+          <span class="arbetter-banner-text">ArBetter only works on the Arbor homepage.</span>
+          <a class="arbetter-banner-btn" href="${DASHBOARD_PATH}">Go to Homepage</a>
+          `;
+          document.body.appendChild(banner);
+        };
+
+        if (document.body) {
+          mount();
+          return;
+        }
+        const obs = new MutationObserver(() => {
+          if (document.body) {
+            obs.disconnect();
+            mount();
+          }
+        });
+        obs.observe(html, { childList: true });
+      };
+
+      /* Synchronous first-paint branding only (watchers & UI mount after script initialization) */
+      if (state.active) {
+        if (isLoginIndexPage()) {
+          html.classList.remove(CLS_MINIMAL);
+          html.classList.add(CLS_LOGIN);
+          applyBranding();
+        } else if (isDashboardPage()) {
+          applyBranding();
+        } else {
+          html.classList.remove(CLS_MINIMAL);
+        }
       }
-    }
 
-    /* ---------- Enable / disable ---------- */
-    const enable = () => {
-      state.active = true;
-      if (!isDashboardPage()) {
-        html.classList.remove(CLS_MINIMAL);
+      /* ---------- Enable / disable ---------- */
+      const enable = () => {
+        state.active = true;
+        startAuthWatcher();
+
+        if (isLoginIndexPage()) {
+          html.classList.remove(CLS_MINIMAL);
+          html.classList.add(CLS_LOGIN);
+          removeHomeWarning();
+          if (!state.nativeView) applyBranding();
+          ensureLoginBar();
+          enhanceLoginPage();
+          return;
+        }
+
+        html.classList.remove(CLS_LOGIN);
+        removeLoginBar();
+
+        if (hasLoginUI()) {
+          redirectToLogin();
+          return;
+        }
+
+        if (!isDashboardPage()) {
+          html.classList.remove(CLS_MINIMAL);
+          restoreBranding();
+          showHomeWarning();
+          return;
+        }
+
+        removeHomeWarning();
+        html.classList.add(CLS_MINIMAL);
+        if (!state.nativeView) applyBranding();
+        ensureUI();
+        sendConfig();
+      };
+
+      const disable = () => {
+        state.active = false;
+        stopAuthWatcher();
+        html.classList.remove(CLS_MINIMAL, CLS_LOGIN);
         restoreBranding();
-        showHomeWarning();
-        return;
-      }
-      removeHomeWarning();
-      html.classList.add(CLS_MINIMAL);
-      if (!state.nativeView) applyBranding();
-      ensureUI();
-      sendConfig();
-    };
+        removeHomeWarning();
+        removeLoginBar();
+        const root = $(ROOT_ID);
+        const fab = $(FAB_ID);
+        if (root) root.remove();
+        if (fab) fab.remove();
+      };
 
-    const disable = () => {
-      state.active = false;
-      html.classList.remove(CLS_MINIMAL);
-      restoreBranding();
-      removeHomeWarning();
-      const root = $(ROOT_ID);
-      const fab = $(FAB_ID);
-      if (root) root.remove();
-      if (fab) fab.remove();
-    };
-
-    chrome.storage.sync.get({ [KEY_ENABLED]: true }, (res) => {
-      state.storageChecked = true;
-      const enabled = res[KEY_ENABLED] !== false;
-      setLS(KEY_CACHE_ENABLED, String(enabled));
-      if (enabled) enable(); else disable();
-    });
-
+        chrome.storage.sync.get({ [KEY_ENABLED]: true }, (res) => {
+          state.storageChecked = true;
+          const enabled = res[KEY_ENABLED] !== false;
+          setLS(KEY_CACHE_ENABLED, String(enabled));
+          if (enabled) enable(); else disable();
+        });
   /* ---------- Parsers ---------- */
   const todayKey = () => {
     const d = new Date();

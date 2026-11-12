@@ -1,7 +1,7 @@
 /* ArBetter - style.css */
 
-/* Native page is hidden only while ArBetter's minimal view is active. */
-html.arbetter-minimal body > *:not(#arbor-minimal-container):not(#arbetter-return-fab) {
+/* Native page is hidden only while ArBetter's minimal container is mounted. */
+html.arbetter-minimal:has(#arbor-minimal-container) body > *:not(#arbor-minimal-container):not(#arbetter-return-fab) {
   display: none !important;
 }
 
@@ -825,6 +825,7 @@ html[data-accent="blue"],
   --ab-primary: #2563eb;
   --ab-primary-soft: #eff6ff;
 }
+html.arbetter-dark[data-accent="blue"],
 .arbetter-root.dark-mode[data-accent="blue"] {
   --ab-primary: #60a5fa;
   --ab-primary-soft: #172554;
@@ -835,6 +836,7 @@ html[data-accent="teal"],
   --ab-primary: #0d9488;
   --ab-primary-soft: #f0fdfa;
 }
+html.arbetter-dark[data-accent="teal"],
 .arbetter-root.dark-mode[data-accent="teal"] {
   --ab-primary: #2dd4bf;
   --ab-primary-soft: #134e4a;
@@ -845,6 +847,7 @@ html[data-accent="emerald"],
   --ab-primary: #059669;
   --ab-primary-soft: #ecfdf5;
 }
+html.arbetter-dark[data-accent="emerald"],
 .arbetter-root.dark-mode[data-accent="emerald"] {
   --ab-primary: #34d399;
   --ab-primary-soft: #064e3b;
@@ -855,6 +858,7 @@ html[data-accent="amber"],
   --ab-primary: #d97706;
   --ab-primary-soft: #fffbeb;
 }
+html.arbetter-dark[data-accent="amber"],
 .arbetter-root.dark-mode[data-accent="amber"] {
   --ab-primary: #fbbf24;
   --ab-primary-soft: #451a03;
@@ -865,6 +869,7 @@ html[data-accent="rose"],
   --ab-primary: #e11d48;
   --ab-primary-soft: #fff1f2;
 }
+html.arbetter-dark[data-accent="rose"],
 .arbetter-root.dark-mode[data-accent="rose"] {
   --ab-primary: #fb7185;
   --ab-primary-soft: #4c0519;
@@ -875,14 +880,10 @@ html[data-accent="violet"],
   --ab-primary: #7c3aed;
   --ab-primary-soft: #f5f3ff;
 }
+html.arbetter-dark[data-accent="violet"],
 .arbetter-root.dark-mode[data-accent="violet"] {
   --ab-primary: #a78bfa;
   --ab-primary-soft: #2e1065;
-}
-
-.arbetter-fab,
-.arbetter-banner-btn {
-  background: var(--ab-primary, #4f46e5);
 }
 
 /* ---------- Accent picker popover ---------- */
@@ -933,4 +934,243 @@ html[data-accent="violet"],
 
 .arbetter-root .ab-swatch.is-selected {
   box-shadow: 0 0 0 2px var(--ab-surface), 0 0 0 4px var(--swatch);
+}
+/* ---------- Login / index page theme (/?/home-ui/index) ---------- */
+html.arbetter-login {
+  --ab-login-bg: #f5f7fb;
+  --ab-login-surface: #ffffff;
+  --ab-login-surface-alt: #f8fafc;
+  --ab-login-border: #e3e7ee;
+  --ab-login-text: #1d2330;
+  --ab-login-muted: #5b6475;
+  color-scheme: light;
+}
+
+html.arbetter-login.arbetter-dark {
+  --ab-login-bg: #0f1115;
+  --ab-login-surface: #181b22;
+  --ab-login-surface-alt: #20242e;
+  --ab-login-border: #2a2f3a;
+  --ab-login-text: #e6e8ec;
+  --ab-login-muted: #9aa3b2;
+  color-scheme: dark;
+}
+
+html.arbetter-login,
+html.arbetter-login body {
+  min-height: 100vh !important;
+  background-color: var(--ab-login-bg) !important;
+  background-image: none !important;
+  color: var(--ab-login-text) !important;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif !important;
+}
+
+html.arbetter-login body {
+  padding-top: 64px !important;
+}
+
+/* Strip Arbor's yellowish background & extra borders from all layout wrappers outside the single card */
+html.arbetter-login body > div:not(#arbetter-login-bar),
+html.arbetter-login body > div:not(#arbetter-login-bar) div:not([data-ab-login-card="true"]),
+html.arbetter-login body > div:not(#arbetter-login-bar) section:not([data-ab-login-card="true"]),
+html.arbetter-login body > div:not(#arbetter-login-bar) main:not([data-ab-login-card="true"]),
+html.arbetter-login body > div:not(#arbetter-login-bar) header:not(#arbetter-login-bar),
+html.arbetter-login body > div:not(#arbetter-login-bar) footer {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Single clean card container (no nested boxes inside boxes) */
+html.arbetter-login [data-ab-login-card="true"] {
+  background-color: var(--ab-login-surface) !important;
+  border: 1px solid var(--ab-login-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 20px rgba(16, 24, 40, 0.08) !important;
+  padding: 28px !important;
+}
+
+html.arbetter-login [data-ab-login-card="true"] form,
+html.arbetter-login [data-ab-login-card="true"] fieldset,
+html.arbetter-login [data-ab-login-card="true"] div {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Matching ArBetter header bar on the login page */
+.ab-login-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483645;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 24px;
+  background: var(--ab-login-surface);
+  border-bottom: 1px solid var(--ab-login-border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.ab-login-bar .ab-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ab-login-bar .ab-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.ab-login-bar .ab-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ab-login-text);
+}
+
+.ab-login-bar .ab-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--ab-login-border);
+  border-radius: 10px;
+  background: var(--ab-login-surface-alt);
+  color: var(--ab-login-text);
+  cursor: pointer;
+}
+
+.ab-login-bar .ab-icon-btn:hover {
+  background: var(--ab-primary-soft, #eef2ff);
+}
+
+/* Replaced "Powered by Arbor Education" -> "Powered by [logo] ArBetter" */
+.ab-powered-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.ab-powered-logo {
+  width: 20px !important;
+  height: 20px !important;
+  object-fit: contain !important;
+}
+
+.ab-powered-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ab-login-text, #1d2330) !important;
+  letter-spacing: -0.01em;
+}
+
+/* Initial Arbor loading spinner on /?/home-ui/index */
+html.arbetter-login .loading-spinner,
+html.arbetter-login .loading-spinner-background {
+  background: var(--ab-login-bg) !important;
+}
+
+html.arbetter-login .loading-spinner__text {
+  color: var(--ab-login-muted) !important;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif !important;
+}
+
+/* 100% dark & light mode text, dividers, inputs, and buttons */
+html.arbetter-login h1,
+html.arbetter-login h2,
+html.arbetter-login h3,
+html.arbetter-login h4,
+html.arbetter-login label,
+html.arbetter-login strong,
+html.arbetter-login b,
+html.arbetter-login p,
+html.arbetter-login span,
+html.arbetter-login small,
+html.arbetter-login li,
+html.arbetter-login div {
+  color: var(--ab-login-text) !important;
+}
+
+html.arbetter-login footer,
+html.arbetter-login footer span,
+html.arbetter-login footer p,
+html.arbetter-login [class*="sub" i],
+html.arbetter-login [class*="hint" i],
+html.arbetter-login [class*="muted" i],
+html.arbetter-login [class*="help" i] {
+  color: var(--ab-login-muted) !important;
+}
+
+html.arbetter-login .ab-powered-title {
+  color: var(--ab-login-text) !important;
+}
+
+html.arbetter-login hr,
+html.arbetter-login [class*="divider" i],
+html.arbetter-login [class*="separator" i] {
+  border-color: var(--ab-login-border) !important;
+}
+
+html.arbetter-login input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]),
+html.arbetter-login select,
+html.arbetter-login textarea {
+  background-color: var(--ab-login-surface-alt) !important;
+  color: var(--ab-login-text) !important;
+  border: 1px solid var(--ab-login-border) !important;
+  border-radius: 8px !important;
+  padding: 10px 12px !important;
+  font-size: 14px !important;
+  outline: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+html.arbetter-login input:not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):focus,
+html.arbetter-login select:focus,
+html.arbetter-login textarea:focus {
+  border-color: var(--ab-primary, #4f46e5) !important;
+  box-shadow: 0 0 0 3px var(--ab-primary-soft, #eef2ff) !important;
+}
+
+html.arbetter-login button[type="submit"],
+html.arbetter-login input[type="submit"] {
+  background-color: var(--ab-primary, #4f46e5) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 10px 18px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: filter 0.15s ease !important;
+}
+
+html.arbetter-login button[type="submit"] span,
+html.arbetter-login button[type="submit"]:hover,
+html.arbetter-login input[type="submit"]:hover {
+  color: #ffffff !important;
+  filter: brightness(1.08) !important;
+}
+
+html.arbetter-login button:not([type="submit"]):not(.ab-icon-btn) {
+  background-color: var(--ab-login-surface-alt) !important;
+  color: var(--ab-login-text) !important;
+  border: 1px solid var(--ab-login-border) !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+}
+
+html.arbetter-login button:not([type="submit"]):not(.ab-icon-btn):hover {
+  background-color: var(--ab-primary-soft, #eef2ff) !important;
+}
+
+html.arbetter-login a {
+  color: var(--ab-primary, #4f46e5) !important;
 }
